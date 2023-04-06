@@ -61,13 +61,13 @@ def parse_sql(sql, parsed):
                 if isinstance(t, sqlparse.sql.Identifier) and str(t) not in columns:
                     tables.append(str(t))
                     if t.get_alias():
-                        aliases[t.get_alias()] = str(t)
+                        aliases[str(t)] = t.get_alias()
                 elif isinstance(t, sqlparse.sql.IdentifierList):
                     for identifier in t.get_identifiers():
                         if str(identifier) not in columns:
                             tables.append(str(identifier))
                             if identifier.get_alias():
-                                aliases[identifier.get_alias()] = str(identifier)
+                                aliases[str(identifier)] = identifier.get_alias()
 
         if isinstance(token, sqlparse.sql.Where):
             for condition in token.tokens:
@@ -86,18 +86,20 @@ def translate(statement: Union[sqlparse.sql.Statement, str], parsed = True):
       raise ValueError("No tables found in the query")
 
     # Create the initial relational algebra query using the first table
-    ra_tables = [radb.ast.RelRef(t) for t in tables]
+    ra_tables = []
+    for table in tables:
+        if table in aliases:
+            old_name, new_name = table.split()
+            ra_tables.append(radb.ast.Rename(new_name, None, radb.ast.RelRef(old_name)))
+        else:
+            ra_tables.append(radb.ast.RelRef(table))
+
+    # Create the initial relational algebra query using the first table
     ra_query = ra_tables[0]
 
-    # Apply table aliases using the Rename operator
-    if aliases:
-        for alias, table_name in aliases.items():
-            if table_name != alias:
-                ra_query = radb.ast.Rename(table_name.split()[1], None, radb.ast.RelRef(table_name.split()[0]))
-    
     # Add the rest of the tables using the Cross operator
-    for table in tables[1:]:
-        ra_query = radb.ast.Cross(ra_query, radb.ast.RelRef(table))
+    for table in ra_tables[1:]:
+        ra_query = radb.ast.Cross(ra_query, table)
                 
     # Apply conditions using the Select operator
     if conditions:
@@ -117,7 +119,5 @@ def translate(statement: Union[sqlparse.sql.Statement, str], parsed = True):
     if columns and not (len(columns) == 1 and columns[0] == '*'):
         ra_columns = [radb.ast.AttrRef(None, col) for col in columns]
         ra_query = radb.ast.Project(ra_columns, ra_query)
-        
-    print(columns)
-    print(tables)
+
     return ra_query
