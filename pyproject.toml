@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "sql-query-engine-package"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{include = "sql_query_engine_package"}]
+
+[tool.poetry.dependencies]
+python = "^3.6"
+radb = "^3.0.4"
+sqlparse = "^0.4.3"
+ra = "^0.2.0"
+antlr4-python3-runtime = "4.9.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
