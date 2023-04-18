@@ -48,17 +48,24 @@ def merge_conditions(conditions: List[radb.ast.ValExprBinaryOp]) -> List[radb.as
         else:
             merged_conditions.append(condition)
     return merged_conditions
- 
-def get_condition_attributes(cond: radb.ast.Node):
+
+
+def get_condition_attributes(cond: radb.ast.ValExpr) -> Set[str]:
     if isinstance(cond, radb.ast.AttrRef):
-        yield cond
-    else:
-        for child in cond.inputs:
-            yield from get_condition_attributes(child) 
+        if cond.rel:
+            return {f"{cond.rel}.{cond.name}"}
+        else:
+            return {cond.name}
+
+    result = set()
+    if hasattr(cond, 'inputs'):
+        for input_ in cond.inputs:
+            result.update(get_condition_attributes(input_))
+    return result
 
 def extract_attributes_from_cross(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]) -> Set[str]:
     if isinstance(node, radb.ast.RelRef):
-        return set(dd[node.rel].keys())
+        return set(list(dd[node.rel].keys()) + [f"{node.rel}.{key}" for key in dd[node.rel].keys()])
 
     elif isinstance(node, radb.ast.Cross):
         left_attrs = extract_attributes_from_cross(node.inputs[0], dd)
@@ -70,9 +77,12 @@ def extract_attributes_from_cross(node: radb.ast.Node, dd: Dict[str, Dict[str, s
         if node.relname:
             original_attrs = dd[original_relname]
             if node.attrnames:
-               return set(node.attrnames)
+               return set(list(node.attrnames) + [f"{node.relname}.{attr}" for attr in node.attrnames])
             else:
-               return set(original_attrs.keys())
+               return set(list(original_attrs.keys()) + [f"{node.relname}.{attr}" for attr in original_attrs.keys()])
+    
+    elif isinstance(node, radb.ast.Select):
+        return extract_attributes_from_cross(node.inputs[0], dd)
 
     else:
         raise ValueError(f"Unexpected node type encountered while extracting attributes: {type(node)}")
@@ -83,7 +93,7 @@ def rule_push_down_selections(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]
 
         if isinstance(child_node, radb.ast.Cross):
             r1, r2 = child_node.inputs
-            attributes = {attr.name for attr in get_condition_attributes(node.cond)}
+            attributes = get_condition_attributes(node.cond)
 
             r1_attrs = extract_attributes_from_cross(r1, dd)
             print("r1 attrs: ", r1_attrs)
