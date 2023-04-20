@@ -1,4 +1,4 @@
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 import radb
 import radb.ast
@@ -87,32 +87,37 @@ def extract_attributes_from_cross(node: radb.ast.Node, dd: Dict[str, Dict[str, s
     else:
         raise ValueError(f"Unexpected node type encountered while extracting attributes: {type(node)}")
 
-def rule_push_down_selections(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]) -> radb.ast.Node:
+def flatten_nested_selects(node: radb.ast.Node) -> Tuple[radb.ast.Node, List[radb.ast.Select]]:
+    nested_selects = []
+    while isinstance(node, radb.ast.Select):
+        nested_selects.append(node)
+        node = node.inputs[0]
+    return node, nested_selects
+
+def try_push_down_selection(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]) -> radb.ast.Node:
     if isinstance(node, radb.ast.Select):
-        child_node = rule_push_down_selections(node.inputs[0], dd)
+        child_node = try_push_down_selection(node.inputs[0], dd)
 
         if isinstance(child_node, radb.ast.Cross):
             r1, r2 = child_node.inputs
             attributes = get_condition_attributes(node.cond)
 
             r1_attrs = extract_attributes_from_cross(r1, dd)
-            print("r1 attrs: ", r1_attrs)
             r2_attrs = extract_attributes_from_cross(r2, dd)
-            print("r2 attrs: ", r2_attrs)
 
             if set(attributes).issubset(r1_attrs) and not set(attributes).intersection(r2_attrs):
-                return radb.ast.Cross(rule_push_down_selections(radb.ast.Select(node.cond, r1), dd), r2)
+                return radb.ast.Cross(try_push_down_selection(radb.ast.Select(node.cond, r1), dd), r2)
 
             if set(attributes).issubset(r2_attrs) and not set(attributes).intersection(r1_attrs):
-                return radb.ast.Cross(r1, rule_push_down_selections(radb.ast.Select(node.cond, r2), dd))
+                return radb.ast.Cross(r1, try_push_down_selection(radb.ast.Select(node.cond, r2), dd))
 
         return radb.ast.Select(node.cond, child_node)
 
     elif isinstance(node, radb.ast.Project):
-        return radb.ast.Project(node.attrs, rule_push_down_selections(node.inputs[0], dd))
+        return radb.ast.Project(node.attrs, try_push_down_selection(node.inputs[0], dd))
 
     elif isinstance(node, radb.ast.Cross):
-        return radb.ast.Cross(rule_push_down_selections(node.inputs[0], dd), rule_push_down_selections(node.inputs[1], dd))
+        return radb.ast.Cross(try_push_down_selection(node.inputs[0], dd), try_push_down_selection(node.inputs[1], dd))
 
     elif isinstance(node, radb.ast.RelRef):
         return node
@@ -128,8 +133,29 @@ def rule_push_down_selections(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]
             renamed_attrs = dict(zip(node.inputs[0].type.attrs, node.attrnames))
             updated_dd[node.relname] = {renamed_attrs[k]: v for k, v in updated_dd[node.relname].items()}
 
-        return radb.ast.Rename(node.relname, node.attrnames, rule_push_down_selections(node.inputs[0], updated_dd))
+        return radb.ast.Rename(node.relname, node.attrnames, try_push_down_selection(node.inputs[0], updated_dd))
 
 
     else:
         raise ValueError("Unexpected node type encountered.")
+
+
+def rule_push_down_selections(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]) -> radb.ast.Node:
+    node, flattened = flatten_nested_selects(node)
+    
+    failed_push_selects: radb.ast.Select = []
+    # Iterate through the reversed flattened list and try to push down each Select
+    for select_node in reversed(flattened):
+        pushed_down = try_push_down_selection(radb.ast.Select(select_node.cond, node), dd)
+        if isinstance(pushed_down, radb.ast.Select):
+            # Couldn't push down this Select, put it back in the flattened list
+            failed_push_selects.append(pushed_down)
+        else:
+            # Successfully pushed down, update the result
+            node = pushed_down
+
+    result = node
+    for select_node in failed_push_selects:
+        result = radb.ast.Select(select_node.cond, result)
+
+    return result

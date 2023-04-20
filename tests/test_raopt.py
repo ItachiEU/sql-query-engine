@@ -84,7 +84,11 @@ class TestRulePushDownSelections(unittest.TestCase):
 
     def test_select_select_person_cross_eats(self):
         self._check("\select_{age = 16} \select_{Person.name = Eats.name} (Person \cross Eats);",
-                    "\select_{Person.name = Eats.name} (\select_{age = 16}(Person) \cross Eats);")        
+                    "\select_{Person.name = Eats.name} (\select_{age = 16}(Person) \cross Eats);")
+    
+    def test_select_select__select_person_cross_eats(self):
+        self._check("\select_{age = 16} \select_{pizza = 'mushroom'} \select_{Person.name = Eats.name} (Person \cross Eats);",
+                    "\select_{Person.name = Eats.name} (\select_{age = 16}(Person) \cross \select_{pizza = 'mushroom'}(Eats));")               
 
     def test_select_age_person_cross_eats_cross_serves(self):
         self._check("\select_{age = 16} ((Person \cross Eats) \cross Serves);",
@@ -98,7 +102,19 @@ class TestRulePushDownSelections(unittest.TestCase):
         self._check("""\select_{Eats.pizza = Serves.pizza} \select_{Person.name = Eats.name}
                        ((Person \cross Eats) \cross Serves);""",
                     """\select_{Eats.pizza = Serves.pizza}( \select_{Person.name = Eats.name}
-                       (Person \cross Eats) \cross Serves );""") 
+                       (Person \cross Eats) \cross Serves );""")
+        
+    def test_select_select_3cross_push_down(self):
+        self._check("""\select_{Eats.pizza = Serves.pizza} \select_{Serves.pizza = 'mushroom'} \select_{Person.name = Eats.name}
+                       ((Person \cross Eats) \cross Serves);""",
+                    """\select_{Eats.pizza = Serves.pizza}( \select_{Person.name = Eats.name}
+                       (Person \cross Eats) \cross (\select_{Serves.pizza = 'mushroom'} Serves));""")
+        
+    def test_select_select_3cross_push_down(self): # Fix push down to a nested Cross
+        self._check("""\select_{Eats.pizza = Serves.pizza} \select_{Eats.pizza = 'mushroom'} \select_{Person.name = Eats.name}
+                       ((Person \cross Eats) \cross Serves);""",
+                    """\select_{Eats.pizza = Serves.pizza}( \select_{Person.name = Eats.name}
+                       (Person \cross (\select_{Eats.pizza = 'mushroom'} Eats)) \cross Serves);""")  
         
     def test_select_rename_eats(self):
         self._check("\select_{pizza = 'mushroom'} \\rename_{E: *}(Eats);",
