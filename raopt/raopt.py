@@ -165,3 +165,29 @@ def rule_push_down_selections(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]
         result = radb.ast.Select(select_node.cond, result)
 
     return result
+
+def rule_merge_selections(node: radb.ast.Node) -> radb.ast.Node:
+    if isinstance(node, radb.ast.Select):
+        child_node = rule_merge_selections(node.inputs[0])
+
+        if isinstance(child_node, radb.ast.Select):
+            # Merge the current selection with the nested selection using a conjunctive predicate
+            merged_cond = radb.ast.ValExprBinaryOp(node.cond, RAParser.AND, child_node.cond)
+            return radb.ast.Select(merged_cond, child_node.inputs[0])
+        else:
+            return radb.ast.Select(node.cond, child_node)
+
+    elif isinstance(node, radb.ast.Project):
+        return radb.ast.Project(node.attrs, rule_merge_selections(node.inputs[0]))
+
+    elif isinstance(node, radb.ast.Cross):
+        return radb.ast.Cross(rule_merge_selections(node.inputs[0]), rule_merge_selections(node.inputs[1]))
+
+    elif isinstance(node, radb.ast.RelRef):
+        return node
+
+    elif isinstance(node, radb.ast.Rename):
+        return radb.ast.Rename(node.relname, node.attrnames, rule_merge_selections(node.inputs[0]))
+
+    else:
+        raise ValueError("Unexpected node type encountered.")
