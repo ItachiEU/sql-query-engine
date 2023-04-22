@@ -105,11 +105,17 @@ def try_push_down_selection(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]) 
             r1_attrs = extract_attributes_from_cross(r1, dd)
             r2_attrs = extract_attributes_from_cross(r2, dd)
 
+            pushed_down_r1 = None
+            pushed_down_r2 = None
+
             if set(attributes).issubset(r1_attrs) and not set(attributes).intersection(r2_attrs):
-                return radb.ast.Cross(try_push_down_selection(radb.ast.Select(node.cond, r1), dd), r2)
+                pushed_down_r1 = rule_push_down_selections(radb.ast.Select(node.cond, r1), dd)
 
             if set(attributes).issubset(r2_attrs) and not set(attributes).intersection(r1_attrs):
-                return radb.ast.Cross(r1, try_push_down_selection(radb.ast.Select(node.cond, r2), dd))
+                pushed_down_r2 = rule_push_down_selections(radb.ast.Select(node.cond, r2), dd)
+
+            if pushed_down_r1 or pushed_down_r2:
+                return radb.ast.Cross(pushed_down_r1 or r1, pushed_down_r2 or r2)
 
         return radb.ast.Select(node.cond, child_node)
 
