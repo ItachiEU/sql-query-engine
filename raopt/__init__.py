@@ -1,1 +1,1 @@
-from .raopt import rule_break_up_selections, break_up_conjunctions, merge_conditions, rule_push_down_selections
+from .raopt import rule_break_up_selections, break_up_conjunctions, merge_conditions, rule_push_down_selections,rule_merge_selections
