@@ -110,11 +110,15 @@ class TestRulePushDownSelections(unittest.TestCase):
                     """\select_{Eats.pizza = Serves.pizza}( \select_{Person.name = Eats.name}
                        (Person \cross Eats) \cross (\select_{Serves.pizza = 'mushroom'} Serves));""")
         
-    def test_select_select_3cross_push_down(self): # Fix push down to a nested Cross
+    def test_select_select_3cross_push_down_nested(self):
         self._check("""\select_{Eats.pizza = Serves.pizza} \select_{Eats.pizza = 'mushroom'} \select_{Person.name = Eats.name}
                        ((Person \cross Eats) \cross Serves);""",
                     """\select_{Eats.pizza = Serves.pizza}( \select_{Person.name = Eats.name}
-                       (Person \cross (\select_{Eats.pizza = 'mushroom'} Eats)) \cross Serves);""")  
+                       (Person \cross (\select_{Eats.pizza = 'mushroom'} Eats)) \cross Serves);""")
+        
+    def test_select_3cross_push_down_nested(self):
+        self._check("""\select_{Eats.pizza = 'mushroom'}((Person \cross Eats) \cross Serves);""",
+                    """((Person \cross \select_{Eats.pizza = 'mushroom'}(Eats)) \cross Serves);""") 
         
     def test_select_rename_eats(self):
         self._check("\select_{pizza = 'mushroom'} \\rename_{E: *}(Eats);",
