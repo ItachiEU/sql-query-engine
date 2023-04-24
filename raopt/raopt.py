@@ -104,7 +104,7 @@ def try_push_down_selection(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]) 
 
             r1_attrs = extract_attributes_from_cross(r1, dd)
             r2_attrs = extract_attributes_from_cross(r2, dd)
-
+            
             pushed_down_r1 = None
             pushed_down_r2 = None
 
@@ -166,6 +166,7 @@ def rule_push_down_selections(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]
 
     return result
 
+
 def rule_merge_selections(node: radb.ast.Node) -> radb.ast.Node:
     if isinstance(node, radb.ast.Select):
         child_node = rule_merge_selections(node.inputs[0])
@@ -191,3 +192,55 @@ def rule_merge_selections(node: radb.ast.Node) -> radb.ast.Node:
 
     else:
         raise ValueError("Unexpected node type encountered.")
+
+def split_conditions(condition: radb.ast.ValExpr) -> List[radb.ast.ValExpr]:
+    if isinstance(condition, radb.ast.ValExprBinaryOp) and condition.op == RAParser.AND:
+        return split_conditions(condition.inputs[0]) + split_conditions(condition.inputs[1])
+    else:
+        return [condition]
+    
+def rule_introduce_joins(node: radb.ast.Node) -> radb.ast.Node:
+    if isinstance(node, radb.ast.Select):
+        child_node = rule_introduce_joins(node.inputs[0])
+
+        if isinstance(child_node, radb.ast.Cross):
+            conditions = split_conditions(node.cond)
+            join_conditions = [c for c in conditions if is_join_condition(c)]
+            non_join_conditions = [c for c in conditions if not is_join_condition(c)]
+
+            if join_conditions:
+                combined_join_condition = join_conditions[0]
+                for c in join_conditions[1:]:
+                    combined_join_condition = radb.ast.ValExprBinaryOp(combined_join_condition, RAParser.AND, c)
+                child_node = radb.ast.Join(child_node.inputs[0], combined_join_condition, child_node.inputs[1])
+
+            if non_join_conditions:
+                cond = non_join_conditions[0]
+                for c in non_join_conditions[1:]:
+                    cond = radb.ast.BinaryValExpr(RAParser.AND, cond, c)
+                return radb.ast.Select(cond, child_node)
+            else:
+                return child_node
+
+        return radb.ast.Select(node.cond, child_node)
+
+    elif isinstance(node, radb.ast.Project):
+        return radb.ast.Project(node.attrs, rule_introduce_joins(node.inputs[0]))
+
+    elif isinstance(node, radb.ast.Cross):
+        return radb.ast.Cross(rule_introduce_joins(node.inputs[0]), rule_introduce_joins(node.inputs[1]))
+
+    elif isinstance(node, radb.ast.RelRef):
+        return node
+
+    elif isinstance(node, radb.ast.Rename):
+        return radb.ast.Rename(node.relname, node.attrnames, rule_introduce_joins(node.inputs[0]))
+
+    else:
+        raise ValueError("Unexpected node type encountered.")
+
+
+def is_join_condition(condition: radb.ast.ValExpr) -> bool:
+    if isinstance(condition, radb.ast.ValExprBinaryOp):
+        return isinstance(condition.inputs[0], radb.ast.AttrRef) and isinstance(condition.inputs[1], radb.ast.AttrRef)
+    return False
