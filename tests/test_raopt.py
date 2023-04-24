@@ -159,6 +159,10 @@ class TestMergeSelections(unittest.TestCase):
     def test_cross_select_select(self):
         self._check("Pizzeria \cross (\select_{pizza = 'mushroom'} \select_{price = 10} Serves);",
                     "Pizzeria \cross (\select_{pizza = 'mushroom' and price = 10} Serves);")
+    
+    def test_2_out_of_3_selects(self):
+        self._check("\select_{Eats.pizza = Serves.pizza}( \select_{Person.name = Eats.name} ((Person \cross (\select_{Eats.pizza = 'mushroom'} Eats)) \cross Serves));",
+                     "\select_{Eats.pizza = Serves.pizza and Person.name = Eats.name} ((Person \cross (\select_{Eats.pizza = 'mushroom'} Eats) \cross Serves));")
 
 
 '''
