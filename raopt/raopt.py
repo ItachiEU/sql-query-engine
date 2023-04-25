@@ -199,30 +199,79 @@ def split_conditions(condition: radb.ast.ValExpr) -> List[radb.ast.ValExpr]:
     else:
         return [condition]
     
+def is_join_condition(condition: radb.ast.ValExpr) -> bool:
+    if isinstance(condition, radb.ast.ValExprBinaryOp):
+        return isinstance(condition.inputs[0], radb.ast.AttrRef) and isinstance(condition.inputs[1], radb.ast.AttrRef)
+    return False
+    
+def collect_table_names(node, tables):
+    if isinstance(node, radb.ast.RelRef):
+        tables.add(node.rel)
+    elif isinstance(node, radb.ast.Rename):
+        tables.add(node.relname)
+        collect_table_names(node.inputs[0], tables)
+    elif isinstance(node, (radb.ast.Project, radb.ast.Select, radb.ast.Join, radb.ast.Cross)):
+        for input in node.inputs:
+            collect_table_names(input, tables)
+
+def involves_both_tables(node, condition):
+    left_tables = set()
+    right_tables = set()
+
+    def collect_attr_names(expr, tables):
+        if isinstance(expr, radb.ast.AttrRef):
+            tables.add(expr.rel)
+        else:
+            for input in expr.inputs:
+                collect_attr_names(input, tables)
+
+    collect_attr_names(condition.inputs[0], left_tables)
+    collect_attr_names(condition.inputs[1], right_tables)
+
+    left_node_tables = set()
+    right_node_tables = set()
+
+    collect_table_names(node.inputs[0], left_node_tables)
+    collect_table_names(node.inputs[1], right_node_tables)
+
+    left_tables = left_tables.intersection(left_node_tables)
+    right_tables = right_tables.intersection(right_node_tables)
+
+    return bool(left_tables) and bool(right_tables)
+
+def process_cross_nodes(node: radb.ast.Node, conditions: List[radb.ast.ValExpr]) -> radb.ast.Node:
+    if isinstance(node, radb.ast.Cross):
+        left = process_cross_nodes(node.inputs[0], conditions)
+        right = process_cross_nodes(node.inputs[1], conditions)
+
+        join_conditions = [c for c in conditions if involves_both_tables(node, c)]
+
+        if join_conditions:
+            combined_join_condition = join_conditions[0]
+            for c in join_conditions[1:]:
+                combined_join_condition = radb.ast.ValExprBinaryOp(combined_join_condition, RAParser.AND, c)
+
+            return radb.ast.Join(left, combined_join_condition, right)
+        else:
+            return radb.ast.Cross(left, right)
+    else:
+        return rule_introduce_joins(node)
+
 def rule_introduce_joins(node: radb.ast.Node) -> radb.ast.Node:
     if isinstance(node, radb.ast.Select):
         child_node = rule_introduce_joins(node.inputs[0])
+        conditions = split_conditions(node.cond)
 
-        if isinstance(child_node, radb.ast.Cross):
-            conditions = split_conditions(node.cond)
-            join_conditions = [c for c in conditions if is_join_condition(c)]
-            non_join_conditions = [c for c in conditions if not is_join_condition(c)]
+        new_child_node = process_cross_nodes(child_node, conditions)
+        non_join_conditions = [c for c in conditions if not is_join_condition(c)]
 
-            if join_conditions:
-                combined_join_condition = join_conditions[0]
-                for c in join_conditions[1:]:
-                    combined_join_condition = radb.ast.ValExprBinaryOp(combined_join_condition, RAParser.AND, c)
-                child_node = radb.ast.Join(child_node.inputs[0], combined_join_condition, child_node.inputs[1])
-
-            if non_join_conditions:
-                cond = non_join_conditions[0]
-                for c in non_join_conditions[1:]:
-                    cond = radb.ast.BinaryValExpr(RAParser.AND, cond, c)
-                return radb.ast.Select(cond, child_node)
-            else:
-                return child_node
-
-        return radb.ast.Select(node.cond, child_node)
+        if non_join_conditions:
+            cond = non_join_conditions[0]
+            for c in non_join_conditions[1:]:
+                cond = radb.ast.ValExprBinaryOp(cond, RAParser.AND, c)
+            return radb.ast.Select(cond, new_child_node)
+        else:
+            return new_child_node
 
     elif isinstance(node, radb.ast.Project):
         return radb.ast.Project(node.attrs, rule_introduce_joins(node.inputs[0]))
@@ -235,12 +284,9 @@ def rule_introduce_joins(node: radb.ast.Node) -> radb.ast.Node:
 
     elif isinstance(node, radb.ast.Rename):
         return radb.ast.Rename(node.relname, node.attrnames, rule_introduce_joins(node.inputs[0]))
+    
+    elif isinstance(node, radb.ast.Join):
+        return node
 
     else:
         raise ValueError("Unexpected node type encountered.")
-
-
-def is_join_condition(condition: radb.ast.ValExpr) -> bool:
-    if isinstance(condition, radb.ast.ValExprBinaryOp):
-        return isinstance(condition.inputs[0], radb.ast.AttrRef) and isinstance(condition.inputs[1], radb.ast.AttrRef)
-    return False
