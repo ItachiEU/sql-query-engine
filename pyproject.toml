@@ -12,6 +12,8 @@ radb = "^3.0.4"
 sqlparse = "^0.4.3"
 ra = "^0.2.0"
 antlr4-python3-runtime = "4.9.2"
+luigi = "^3.2.1"
+pytest-repeat = "^0.9.1"
 
 
 [build-system]
