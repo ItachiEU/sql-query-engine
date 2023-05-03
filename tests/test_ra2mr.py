@@ -199,7 +199,7 @@ class TestMREvaluation(object):
     def test_person_join_eats_mushroom(self):
         querystring = "Person \join_{Person.name = Eats.name} (\select_{pizza='mushroom'} Eats);"
         computed = self._evaluate(querystring)
-        assert len(computed)== 4
+        assert len(computed)== 4 
 
         relation, tuple = computed[0].split('\t')
         json_tuple = json.loads(tuple)

@@ -126,51 +126,75 @@ class JoinTask(RelAlgQueryTask):
 
     
     def mapper(self, line):
-        relation, tuple = line.split('\t')
-        json_tuple = json.loads(tuple)
+        relation, data = line.split('\t')
+        json_tuple = json.loads(data)
 
-        raquery:radb.ast.Join = radb.parse.one_statement_from_string(self.querystring)
+        raquery: radb.ast.Join = radb.parse.one_statement_from_string(self.querystring)
         condition = raquery.cond
 
         join_attributes = []
 
-        if isinstance(condition, radb.ast.ValExprBinaryOp) and condition.op == radb.parse.RAParser.EQ:
-            left = condition.inputs[0]
-            right = condition.inputs[1]
-            if isinstance(left, radb.ast.AttrRef) and isinstance(right, radb.ast.AttrRef):
-                join_attributes.append((left.name, right.name))
+        def extract_conditions(cond):
+            if isinstance(cond, radb.ast.ValExprBinaryOp) and cond.op == radb.parse.RAParser.AND:
+                left_conditions = extract_conditions(cond.inputs[0])
+                right_conditions = extract_conditions(cond.inputs[1])
+                return left_conditions + right_conditions
+            elif isinstance(cond, radb.ast.ValExprBinaryOp) and cond.op == radb.parse.RAParser.EQ:
+                left = cond.inputs[0]
+                right = cond.inputs[1]
+                if isinstance(left, radb.ast.AttrRef) and isinstance(right, radb.ast.AttrRef):
+                    return [(f"{left.rel}.{left.name}", f"{right.rel}.{right.name}")]
+            return []
+
+        join_attributes = extract_conditions(condition)
 
         if join_attributes:
+            key_values = []
             for left_attr, right_attr in join_attributes:
-                relation_name = relation.split('.')[0]
-                key = json_tuple[left_attr if relation_name == left_attr.split('.')[0] else right_attr]
-                value = (relation, {k: v for k, v in json_tuple.items() if k != (left_attr if relation_name == left_attr.split('.')[0] else right_attr)})
-                yield key, json.dumps(value)
+                key_value = json_tuple[left_attr if left_attr.split('.')[0] in relation.split('_') else right_attr]
+                key_values.append(key_value)
+            key = tuple(key_values)
+            value = (relation, {k: v for k, v in json_tuple.items()})
+            yield key, json.dumps(value)
 
     def reducer(self, key, values):
         raquery: radb.ast.Join = radb.parse.one_statement_from_string(self.querystring)
 
-        tuples_from_R = []
-        tuples_from_S = []
+        tuples_from_left = []
+        tuples_from_right = []
 
-        for value in values:
-            relation, tuple = json.loads(value)
-            relation_name = relation.split('.')[0]
-            left_attr = raquery.cond.inputs[0].rel.split('.')[0]
-            if relation_name == left_attr:
-                tuples_from_R.append(tuple)
+        def get_relation_names(expr):
+            if isinstance(expr, radb.ast.Join):
+                left_names = get_relation_names(expr.inputs[0])
+                right_names = get_relation_names(expr.inputs[1])
+                return f"{left_names}_{right_names}"
+            elif isinstance(expr, radb.ast.Select):
+                return get_relation_names(expr.inputs[0])
+            elif isinstance(expr, radb.ast.Rename):
+                return expr.relname
+            elif isinstance(expr, radb.ast.RelRef):
+                return expr.rel
             else:
-                tuples_from_S.append(tuple)
+                raise Exception(f"Unsupported expression type: {type(expr)}")
+
+        left_attr = get_relation_names(raquery.inputs[0])
+        right_attr = get_relation_names(raquery.inputs[1])
+        for value in values:
+            relation, data = json.loads(value)
+            if relation == left_attr:
+                tuples_from_left.append(data)
+            else:
+                tuples_from_right.append(data)
 
         seen_tuples = set()
-        for tuple_R in tuples_from_R:
-            for tuple_S in tuples_from_S:
-                result_tuple = {**tuple_R, **tuple_S}
+        for tuple_left in tuples_from_left:
+            for tuple_right in tuples_from_right:
+                result_tuple = {**tuple_left, **tuple_right}
                 result_tuple_json = json.dumps(result_tuple, sort_keys=True)
 
                 if result_tuple_json not in seen_tuples:
                     seen_tuples.add(result_tuple_json)
-                    yield 'R_S', result_tuple_json
+                    yield f'{left_attr}_{right_attr}', result_tuple_json
 
 
 class SelectTask(RelAlgQueryTask):
@@ -183,8 +207,8 @@ class SelectTask(RelAlgQueryTask):
 
     
     def mapper(self, line):
-        relation, tuple = line.split('\t')
-        json_tuple = json.loads(tuple)
+        relation, data = line.split('\t')
+        json_tuple = json.loads(data)
 
         condition: radb.ast.Select = radb.parse.one_statement_from_string(self.querystring).cond
         
@@ -221,8 +245,8 @@ class RenameTask(RelAlgQueryTask):
 
 
     def mapper(self, line):
-        relation, tuple = line.split('\t')
-        json_tuple = json.loads(tuple)
+        relation, data = line.split('\t')
+        json_tuple = json.loads(data)
 
         raquery: radb.ast.Rename = radb.parse.one_statement_from_string(self.querystring)
 
@@ -246,15 +270,15 @@ class ProjectTask(RelAlgQueryTask):
         return [task_factory(raquery.inputs[0], step=self.step + 1, env=self.exec_environment)]    
 
     def mapper(self, line):
-        relation, tuple = line.split('\t')
-        json_tuple = json.loads(tuple)
+        relation, data = line.split('\t')
+        json_tuple = json.loads(data)
 
         attrs: list[radb.ast.ValExpr] = radb.parse.one_statement_from_string(self.querystring).attrs
-        attr_names: list[str] = [attr.name for attr in attrs]
+        attr_names: list[str] = [f"{attr.rel}.{attr.name}" if attr.rel else attr.name for attr in attrs]
 
         projected_tuple = {
             k: v for k, v in json_tuple.items() 
-            if k.split('.')[1] in attr_names and k.split('.')[0] == relation
+            if k in attr_names or (k.split('.')[1] in attr_names and k.split('.')[0] == relation)
         }
         yield (relation, json.dumps(projected_tuple))
         

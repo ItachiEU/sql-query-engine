@@ -6,10 +6,10 @@ import sqlparse
 import unittest
 
 import raopt
-import ra2mr
+from ra2mr import ra2mr
 import sql2ra
 
-import tests.test_ra2mr as test_ra2mr
+from test_ra2mr import prepareMockFileSystem
 
 
 '''
@@ -19,7 +19,7 @@ May be called like any Python unittest, or using pytest, e.g. "pytest test_e2e.p
 class End2EndUnitTests(unittest.TestCase):
     
     def setUp(self):
-        test_ra2mr.prepareMockFileSystem()
+        prepareMockFileSystem()
 
     def _evaluate(self, sqlstring):
         dd = {}
