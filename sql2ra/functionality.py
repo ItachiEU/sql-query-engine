@@ -106,8 +106,17 @@ def translate(statement: Union[sqlparse.sql.Statement, str], parsed = True):
         combined_conditions = None
         for condition in conditions:
             attr, op, value = condition
-            attr_ref = radb.ast.AttrRef(None, attr)
-            val = radb.ast.RAString(value) if value.startswith("'") and value.endswith("'") else radb.ast.RANumber(value)
+            if '.' in attr:
+                attr_ref = radb.ast.AttrRef(attr.split('.')[0], attr.split('.')[1])
+            else:
+                attr_ref = radb.ast.AttrRef(None, attr)
+
+            if value.startswith("'") and value.endswith("'"):
+                val = radb.ast.RAString(value)
+            elif '.' in value:
+                val = radb.ast.AttrRef(value.split('.')[0], value.split('.')[1])
+            else:
+                val = radb.ast.RANumber(value)
             new_condition = radb.ast.ValExprBinaryOp(attr_ref, op, val)
             if combined_conditions is None:
                 combined_conditions = new_condition
