@@ -147,6 +147,10 @@ def try_push_down_selection(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]) 
 
 
 def rule_push_down_selections(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]) -> radb.ast.Node:
+    project_attrs = None
+    if isinstance(node, radb.ast.Project):
+        project_attrs = node.attrs
+        node = node.inputs[0]
     node, flattened = flatten_nested_selects(node)
     
     failed_push_selects: radb.ast.Select = []
@@ -164,6 +168,8 @@ def rule_push_down_selections(node: radb.ast.Node, dd: Dict[str, Dict[str, str]]
     for select_node in failed_push_selects:
         result = radb.ast.Select(select_node.cond, result)
 
+    if project_attrs:
+        result = radb.ast.Project(project_attrs, result)
     return result
 
 
