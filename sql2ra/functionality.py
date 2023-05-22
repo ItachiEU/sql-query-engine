@@ -126,7 +126,7 @@ def translate(statement: Union[sqlparse.sql.Statement, str], parsed = True):
 
     # Project the specified columns using the Project operator
     if columns and not (len(columns) == 1 and columns[0] == '*'):
-        ra_columns = [radb.ast.AttrRef(None, col) for col in columns]
+        ra_columns = [radb.ast.AttrRef(col.split('.')[0], col.split('.')[1]) if '.' in col else radb.ast.AttrRef(None, col) for col in columns]
         ra_query = radb.ast.Project(ra_columns, ra_query)
 
     return ra_query

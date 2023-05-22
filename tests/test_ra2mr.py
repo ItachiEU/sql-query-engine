@@ -21,7 +21,7 @@ def prepareMockFileSystem():
         # Ensure mock file system is empty and all temporary files have been cleared.
         luigi.mock.MockFileSystem().clear()
 
-        f1 = luigi.mock.MockTarget('Person.json').open('w')
+        f1 = luigi.mock.MockTarget('./data/Person.json').open('w')
         f1.write('Person\t{"Person.name": "Amy", "Person.age": 16, "Person.gender": "female"}\n')
         f1.write('Person\t{"Person.name": "Ben", "Person.age": 21, "Person.gender": "male"}\n')
         f1.write('Person\t{"Person.name": "Cal", "Person.age": 33, "Person.gender": "male"}\n')
@@ -33,7 +33,7 @@ def prepareMockFileSystem():
         f1.write('Person\t{"Person.name": "Ian", "Person.age": 18, "Person.gender": "male"}\n')
         f1.close()
 
-        f2 = luigi.mock.MockTarget('Eats.json').open('w')
+        f2 = luigi.mock.MockTarget('./data/Eats.json').open('w')
         f2.write('Eats\t{"Eats.name" : "Amy", "Eats.pizza": "mushroom"}\n')
         f2.write('Eats\t{"Eats.name" : "Amy", "Eats.pizza": "pepperoni"}\n')
         f2.write('Eats\t{"Eats.name" : "Ben", "Eats.pizza": "cheese"}\n')
@@ -56,7 +56,7 @@ def prepareMockFileSystem():
         f2.write('Eats\t{"Eats.name" : "Ian", "Eats.pizza": "supreme"}\n')
         f2.close()
 
-        f3 = luigi.mock.MockTarget('Frequents.json').open('w')
+        f3 = luigi.mock.MockTarget('./data/Frequents.json').open('w')
         f3.write('Frequents\t{"Frequents.name" : "Amy", "Frequents.pizzeria": "Pizza Hut"}\n')
         f3.write('Frequents\t{"Frequents.name" : "Ben", "Frequents.pizzeria": "Pizza Hut"}\n')
         f3.write('Frequents\t{"Frequents.name" : "Ben", "Frequents.pizzeria": "Chicago Pizza"}\n')
@@ -78,7 +78,7 @@ def prepareMockFileSystem():
         f3.write('Frequents\t{"Frequents.name" : "Ian", "Frequents.pizzeria": "Dominos"}\n')
         f3.close()
 
-        f4 = luigi.mock.MockTarget('Serves.json').open('w')
+        f4 = luigi.mock.MockTarget('./data/Serves.json').open('w')
         f4.write('Serves\t{"Serves.pizzeria" : "Chicago Pizza", "Serves.pizza" : "cheese", "Serves.price" : 7.75}\n')
         f4.write('Serves\t{"Serves.pizzeria" : "Chicago Pizza", "Serves.pizza" : "supreme", "Serves.price" : 8.5}\n')
         f4.write('Serves\t{"Serves.pizzeria" : "Dominos", "Serves.pizza" : "cheese", "Serves.price" : 9.75}\n')
@@ -150,7 +150,7 @@ class TestMREvaluation(object):
         self._check(querystring, expected)
     
     def test_select_female_gender_person(self):
-        querystring = "\select_{'female'=gender}(Person);"
+        querystring = "\select_{'female'=Person.gender}(Person);"
         expected = [self.person_amy, self.person_fay, self.person_hil]
         self._check(querystring, expected)
 
@@ -173,7 +173,7 @@ class TestMREvaluation(object):
         assert len(computed) == 3
 
     def test_select_age_21_Person(self):
-        querystring = "\select_{age=21}(Person);"
+        querystring = "\select_{Person.age=21}(Person);"
         result = [self.person_fay, self.person_ben]
         self._check(querystring, result)
 
@@ -183,7 +183,7 @@ class TestMREvaluation(object):
         assert len(computed) == 1
 
     def test_select_person_female_age_16(self):
-        querystring = "\select_{gender='female' and age=16}(Person);"
+        querystring = "\select_{Person.gender='female' and Person.age=16}(Person);"
         result = [self.person_amy]
         self._check(querystring, result)
 
@@ -206,7 +206,7 @@ class TestMREvaluation(object):
         assert len(json_tuple.keys()) == 5 # Make sure there are 5 attributes.
         
     def test_project_Person_gender(self):
-        querystring = "\project_{gender} Person;"
+        querystring = "\project_{Person.gender} Person;"
         result = ['{"Person.gender": "female"}', '{"Person.gender": "male"}']
         self._check(querystring, result)
 

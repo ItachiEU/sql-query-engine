@@ -7,6 +7,10 @@ from luigi.mock import MockTarget
 import radb
 import radb.ast
 import radb.parse
+import raopt
+import sql2ra
+import sqlparse
+from pathlib import Path
 
 '''
 Control where the input data comes from, and where output data should go.
@@ -81,7 +85,7 @@ class RelAlgQueryTask(luigi.contrib.hadoop.JobTask, OutputMixin):
         if self.exec_environment == ExecEnv.HDFS:
             filename = "tmp" + str(self.step)
         else:
-            filename = "tmp" + str(self.step) + ".tmp"
+            filename = "./data/tmp" + str(self.step) + ".tmp"
         return self.get_output(filename)
 
 
@@ -96,7 +100,7 @@ def task_factory(raquery, step=1, env=ExecEnv.HDFS):
         return SelectTask(querystring=str(raquery) + ";", step=step, exec_environment=env)
 
     elif isinstance(raquery, radb.ast.RelRef):
-        filename = raquery.rel + ".json"
+        filename = f"./data/{raquery.rel}.json"
         return InputData(filename=filename, exec_environment=env)
 
     elif isinstance(raquery, radb.ast.Join):
@@ -290,5 +294,32 @@ class ProjectTask(RelAlgQueryTask):
             yield (key, value)
 
         
-if __name__ == '__main__':
-    luigi.run()
+def run_sql_query_on_hadoop(env: ExecEnv, sqlstring: str, dd: dict = {}, clean_up = True):
+    if clean_up:
+        for file in Path('./data').glob('tmp*'):
+            file.unlink()
+
+    if len(dd) == 0:
+        dd["Person"] = {"name": "string", "age": "integer", "gender": "string"}
+        dd["Eats"] = {"name": "string", "pizza": "string"}
+        dd["Serves"] = {"pizzeria": "string", "pizza": "string", "price": "integer"}
+
+    stmt = sqlparse.parse(sqlstring)[0]
+    ra0 = sql2ra.translate(stmt)
+
+    ra1 = raopt.rule_break_up_selections(ra0)
+    ra2 = raopt.rule_push_down_selections(ra1, dd)
+
+    ra3 = raopt.rule_merge_selections(ra2)
+    ra4 = raopt.rule_introduce_joins(ra3)
+
+    task = task_factory(ra4, env=env)
+    luigi.build([task], local_scheduler=True, detailed_summary=True)
+
+    with task.output().open('r') as f:
+        lines = []
+        for line in f:
+            lines.append(line)
+            
+    if lines:
+        print(lines[0], len(lines))
