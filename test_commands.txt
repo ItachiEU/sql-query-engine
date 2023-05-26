@@ -1,0 +1,2 @@
+python main.py --mode spark --env LOCAL 
+python main.py --mode hadoop --env LOCAL

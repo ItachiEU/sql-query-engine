@@ -51,22 +51,22 @@ class End2EndUnitTests(unittest.TestCase):
         self.assertEqual(len(computed), 9)
 
     def test_select_person_age_16(self):
-        sqlstring = "select distinct * from Person where age = 16"
+        sqlstring = "select distinct * from Person where Person.age = 16"
         computed = self._evaluate(sqlstring)
         self.assertEqual(len(computed), 1)
 
     def test_select_person_age_gender(self):
-        sqlstring = "select distinct * from Person where gender='female' and age=16"
+        sqlstring = "select distinct * from Person where Person.gender='female' and Person.age=16"
         computed = self._evaluate(sqlstring)
         self.assertEqual(len(computed), 1)
 
     def test_project_name(self):
-        sqlstring = "select distinct name from Person"
+        sqlstring = "select distinct Person.name from Person"
         computed = self._evaluate(sqlstring)
         self.assertEqual(len(computed), 9)
 
     def test_project_name_age(self):
-        sqlstring = "select distinct name, age from Person"
+        sqlstring = "select distinct Person.name, Person.age from Person"
         computed = self._evaluate(sqlstring)
         self.assertEqual(len(computed), 9)
         self.assertIn({"Person.name": "Amy", "Person.age": 16}, [json.loads(tuple.split('\t')[1]) for tuple in computed])
