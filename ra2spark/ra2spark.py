@@ -10,8 +10,6 @@ import sqlparse
 import sql2ra
 import raopt
 
-spark = SparkSession.builder.getOrCreate()
-
 def extract_conditions(cond):
    if isinstance(cond, radb.ast.ValExprBinaryOp) and cond.op == radb.parse.RAParser.AND:
           left_conditions = extract_conditions(cond.inputs[0])
@@ -46,10 +44,10 @@ def evaluate_condition(condition):
         raise Exception("Unsupported condition type: {}".format(type(condition)))
 
 
-def task_factory(raquery: radb.ast.Node) -> Callable[[], pyspark.rdd.RDD]:
+def task_factory(raquery: radb.ast.Node, spark: SparkSession) -> Callable[[], pyspark.rdd.RDD]:
     if isinstance(raquery, radb.ast.Select):
         cond_func = evaluate_condition(raquery.cond)
-        input_transformation = task_factory(raquery.inputs[0])
+        input_transformation = task_factory(raquery.inputs[0], spark)
         return lambda: input_transformation().filter(cond_func)
 
     elif isinstance(raquery, radb.ast.RelRef):
@@ -66,8 +64,8 @@ def task_factory(raquery: radb.ast.Node) -> Callable[[], pyspark.rdd.RDD]:
         return lambda : rdd.map(parse_line)
      
     elif isinstance(raquery, radb.ast.Join):
-        left_transformation = task_factory(raquery.inputs[0])
-        right_transformation = task_factory(raquery.inputs[1])
+        left_transformation = task_factory(raquery.inputs[0], spark)
+        right_transformation = task_factory(raquery.inputs[1], spark)
         
         conditions = extract_conditions(raquery.cond)
 
@@ -77,7 +75,7 @@ def task_factory(raquery: radb.ast.Node) -> Callable[[], pyspark.rdd.RDD]:
         return lambda: left_rdd.join(right_rdd).map(lambda x: {**x[1][0], **x[1][1]})
 
     elif isinstance(raquery, radb.ast.Project):
-        input_transformation = task_factory(raquery.inputs[0])
+        input_transformation = task_factory(raquery.inputs[0], spark)
         attrs = [f"{attr.rel}.{attr.name}" for attr in raquery.attrs]
         
         def to_tuple(row):
@@ -93,7 +91,7 @@ def task_factory(raquery: radb.ast.Node) -> Callable[[], pyspark.rdd.RDD]:
                     .map(to_dict))
 
     elif isinstance(raquery, radb.ast.Rename):
-        input_transformation = task_factory(raquery.inputs[0])
+        input_transformation = task_factory(raquery.inputs[0], spark)
         old_name = raquery.inputs[0].rel
         new_name = raquery.relname
         
@@ -105,12 +103,14 @@ def task_factory(raquery: radb.ast.Node) -> Callable[[], pyspark.rdd.RDD]:
 
      
 def run_radb_query_in_spark(query: Union[str, radb.ast.Node]):
+    spark = SparkSession.builder.getOrCreate()
+    
     if isinstance(query, str):
         radb_query = radb.parse.one_statement_from_string(query)
     else:
         radb_query = query
         
-    transformation = task_factory(radb_query)
+    transformation = task_factory(radb_query, spark)
     result_rdd = transformation().collect()
     print(result_rdd, len(result_rdd))
 

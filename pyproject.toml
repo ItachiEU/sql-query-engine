@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "sql_query_engine_package"}]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.8"
 radb = "^3.0.4"
 sqlparse = "^0.4.3"
 ra = "^0.2.0"

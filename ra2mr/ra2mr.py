@@ -12,6 +12,10 @@ import sql2ra
 import sqlparse
 from pathlib import Path
 
+luigi.contrib.hadoop.attach(raopt)
+luigi.contrib.hadoop.attach(sql2ra)
+luigi.contrib.hadoop.attach(sqlparse)
+
 '''
 Control where the input data comes from, and where output data should go.
 '''
@@ -83,9 +87,9 @@ class RelAlgQueryTask(luigi.contrib.hadoop.JobTask, OutputMixin):
     '''
     def output(self):
         if self.exec_environment == ExecEnv.HDFS:
-            filename = "tmp" + str(self.step)
+            filename = "/data/tmp" + str(self.step)
         else:
-            filename = "./data/tmp" + str(self.step) + ".tmp"
+            filename = "/data/tmp" + str(self.step) + ".tmp"
         return self.get_output(filename)
 
 
@@ -100,7 +104,7 @@ def task_factory(raquery, step=1, env=ExecEnv.HDFS):
         return SelectTask(querystring=str(raquery) + ";", step=step, exec_environment=env)
 
     elif isinstance(raquery, radb.ast.RelRef):
-        filename = f"./data/{raquery.rel}.json"
+        filename = f"/data/{raquery.rel}.json"
         return InputData(filename=filename, exec_environment=env)
 
     elif isinstance(raquery, radb.ast.Join):
@@ -210,7 +214,7 @@ class SelectTask(RelAlgQueryTask):
         return [task_factory(raquery.inputs[0], step=self.step + 1, env=self.exec_environment)]
 
     
-    def mapper(self, line):
+    def mapper(self, line): 
         relation, data = line.split('\t')
         json_tuple = json.loads(data)
 
@@ -295,7 +299,7 @@ class ProjectTask(RelAlgQueryTask):
 
         
 def run_sql_query_on_hadoop(env: ExecEnv, sqlstring: str, dd: dict = {}, clean_up = True):
-    if clean_up:
+    if clean_up and env != ExecEnv.HDFS:
         for file in Path('./data').glob('tmp*'):
             file.unlink()
 
@@ -316,10 +320,10 @@ def run_sql_query_on_hadoop(env: ExecEnv, sqlstring: str, dd: dict = {}, clean_u
     task = task_factory(ra4, env=env)
     luigi.build([task], local_scheduler=True, detailed_summary=True)
 
-    with task.output().open('r') as f:
-        lines = []
-        for line in f:
-            lines.append(line)
-            
-    if lines:
-        print(lines[0], len(lines))
+    if env != ExecEnv.HDFS:
+        with task.output().open('r') as f:
+            lines = []
+            for line in f:
+                lines.append(line)   
+        if lines:
+            print(lines[0], len(lines))
