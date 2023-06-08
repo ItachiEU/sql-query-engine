@@ -1,0 +1,5 @@
+{
+   "Person": {"name": "string", "age": "integer", "gender": "string"},
+   "Eats": {"name": "string", "pizza": "string"},
+   "Serves": {"pizzeria": "string", "pizza": "string", "price": "integer"}
+}

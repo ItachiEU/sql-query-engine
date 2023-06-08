@@ -1,3 +1,4 @@
+import os
 from typing import Callable, Union
 import radb
 import radb.ast
@@ -44,14 +45,15 @@ def evaluate_condition(condition):
         raise Exception("Unsupported condition type: {}".format(type(condition)))
 
 
-def task_factory(raquery: radb.ast.Node, spark: SparkSession) -> Callable[[], pyspark.rdd.RDD]:
+def task_factory(raquery: radb.ast.Node, spark: SparkSession, env: str) -> Callable[[], pyspark.rdd.RDD]:
     if isinstance(raquery, radb.ast.Select):
         cond_func = evaluate_condition(raquery.cond)
-        input_transformation = task_factory(raquery.inputs[0], spark)
+        input_transformation = task_factory(raquery.inputs[0], spark, env)
         return lambda: input_transformation().filter(cond_func)
 
     elif isinstance(raquery, radb.ast.RelRef):
-        filename = f"./data/{raquery.rel}.csv"
+        cluster_name = os.getenv("CLUSTER_NAME", "cluster-2461-m")
+        filename = f"hdfs://{cluster_name}/data/{raquery.rel}.csv" if env == 'HDFS' else f"/data/{raquery.rel}.csv"
         rdd = spark.sparkContext.textFile(filename)
         header_line = rdd.first()
         column_names = header_line.split(',')
@@ -64,8 +66,8 @@ def task_factory(raquery: radb.ast.Node, spark: SparkSession) -> Callable[[], py
         return lambda : rdd.map(parse_line)
      
     elif isinstance(raquery, radb.ast.Join):
-        left_transformation = task_factory(raquery.inputs[0], spark)
-        right_transformation = task_factory(raquery.inputs[1], spark)
+        left_transformation = task_factory(raquery.inputs[0], spark, env)
+        right_transformation = task_factory(raquery.inputs[1], spark, env)
         
         conditions = extract_conditions(raquery.cond)
 
@@ -75,7 +77,7 @@ def task_factory(raquery: radb.ast.Node, spark: SparkSession) -> Callable[[], py
         return lambda: left_rdd.join(right_rdd).map(lambda x: {**x[1][0], **x[1][1]})
 
     elif isinstance(raquery, radb.ast.Project):
-        input_transformation = task_factory(raquery.inputs[0], spark)
+        input_transformation = task_factory(raquery.inputs[0], spark, env)
         attrs = [f"{attr.rel}.{attr.name}" for attr in raquery.attrs]
         
         def to_tuple(row):
@@ -91,7 +93,7 @@ def task_factory(raquery: radb.ast.Node, spark: SparkSession) -> Callable[[], py
                     .map(to_dict))
 
     elif isinstance(raquery, radb.ast.Rename):
-        input_transformation = task_factory(raquery.inputs[0], spark)
+        input_transformation = task_factory(raquery.inputs[0], spark, env)
         old_name = raquery.inputs[0].rel
         new_name = raquery.relname
         
@@ -102,20 +104,21 @@ def task_factory(raquery: radb.ast.Node, spark: SparkSession) -> Callable[[], py
         raise Exception("Operator " + str(type(raquery)) + " not implemented (yet).")
 
      
-def run_radb_query_in_spark(query: Union[str, radb.ast.Node]):
-    spark = SparkSession.builder.getOrCreate()
+def run_radb_query_in_spark(query: Union[str, radb.ast.Node], env: str, ll: str):
+    spark: SparkSession = SparkSession.builder.getOrCreate()
+    spark.sparkContext.setLogLevel(ll)
     
     if isinstance(query, str):
         radb_query = radb.parse.one_statement_from_string(query)
     else:
         radb_query = query
         
-    transformation = task_factory(radb_query, spark)
+    transformation = task_factory(radb_query, spark, env)
     result_rdd = transformation().collect()
     print(result_rdd, len(result_rdd))
 
    
-def run_sql_query_in_spark(sqlstring: str, dd: dict = {}):
+def run_sql_query_in_spark(sqlstring: str, env = 'HDFS', dd: dict = {}, ll = 'INFO'):
   if len(dd) == 0:
      dd["Person"] = {"name": "string", "age": "integer", "gender": "string"}
      dd["Eats"] = {"name": "string", "pizza": "string"}
@@ -130,4 +133,4 @@ def run_sql_query_in_spark(sqlstring: str, dd: dict = {}):
   ra3 = raopt.rule_merge_selections(ra2)
   ra4 = raopt.rule_introduce_joins(ra3)
   
-  run_radb_query_in_spark(ra4)
+  run_radb_query_in_spark(ra4, env, ll)
