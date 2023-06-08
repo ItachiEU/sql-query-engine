@@ -1,0 +1,10 @@
+{
+   "PART": {"P_PARTKEY": "int", "P_NAME": "string", "P_MFGR": "string", "P_BRAND": "string", "P_TYPE": "string", "P_SIZE": "int", "P_CONTAINER": "string", "P_RETAILPRICE": "float", "P_COMMENT": "STRING"},
+   "CUSTOMER": {"C_CUSTKEY": "int", "C_NAME": "string", "C_ADDRESS": "string", "C_NATIONKEY": "int", "C_PHONE": "string", "C_ACCTBAL": "float", "C_MKTSEGMENT": "string", "C_COMMENT": "string"},
+   "REGION": {"R_REGIONKEY": "int", "R_NAME" : "string", "R_COMMENT": "string"},
+   "ORDERS": {"O_ORDERKEY": "int", "O_CUSTKEY": "int", "O_ORDERSTATUS": "string", "O_TOTALPRICE": "float", "O_ORDERDATE": "string", "O_ORDERPRIORITY": "string", "O_CLERK": "string", "O_SHIPPRIORITY": "int", "O_COMMENT": "string"},
+   "LINEITEM": {"L_ORDERKEY": "int", "L_PARTKEY": "int", "L_SUPPKEY": "int", "L_LINENUMBER": "int", "L_QUANTITY": "int", "L_EXTENDEDPRICE": "float", "L_DISCOUNT": "float", "L_TAX": "float", "L_RETURNFLAG": "string", "L_LINESTATUS": "string", "L_SHIPDATE": "string", "L_COMMITDATE": "string", "L_RECEIPTDATE": "string", "L_SHIPINSTRUCT": "string", "L_SHIPMODE": "string", "L_COMMENT": "string"},
+   "NATION": {"N_NATIONKEY": "int", "N_NAME": "string", "N_REGIONKEY": "int", "N_COMMENT": "string"},
+   "SUPPLIER": {"S_SUPPKEY": "int", "S_NAME": "string", "S_ADDRESS": "string", "S_NATIONKEY": "int", "S_PHONE": "string", "S_ACCTBAL": "float", "S_COMMENT": "string"},
+   "PARTSUPP": {"PS_PARTKEY": "int", "PS_SUPPKEY": "int", "PS_AVAILQTY": "int", "PS_SUPPLYCOST": "float", "PS_COMMENT": "string"}
+}
