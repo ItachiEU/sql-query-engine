@@ -18,7 +18,8 @@ if __name__ == '__main__':
    if args.dd_path:
       with open(args.dd_path, 'r') as dd_file:
          dd = json.load(dd_file)
+         
    if args.mode == 'spark':
-      ra2spark.run_sql_query_in_spark(args.query, dd, ll=args.log_level)
+      ra2spark.run_sql_query_in_spark(args.query, args.env, dd, ll=args.log_level)
    else:
       ra2mr.run_sql_query_on_hadoop(ra2mr.ExecEnv.LOCAL if args.env == 'LOCAL' else ra2mr.ExecEnv.HDFS, args.query, dd)

@@ -18,18 +18,14 @@ Thesis: Query optimisation in distributed databases
   - Set up the master node and three worker nodes to n2-standard-2 (2 vCPU, 8 GB)
   - Set up an initialisation action to the script_for_cloud.sh script
 
-- Ssh to both worker nodes and do the following:
-
-    <!-- - `sudo -s` -->
+- Ssh to all worker nodes and do the following:
 
   - `sudo chown root /var/lib/hadoop-hdfs`
   - `sudo hdfs --daemon start datanode`
-  - `sudo yarn --daemon start nodemanager`
 
 - Ssh to master node from cloud console
 
   - `cd /home/sql-query-engine/`
-  <!-- - `sudo -s` -->
   - `source .venv/bin/activate`
   - `export CLUSTER_NAME=<name_of_the_cluster_here>`
   - `export PYSPARK_DRIVER_PYTHON=/home/sql-query-engine/.venv/bin/python`
@@ -48,4 +44,4 @@ Thesis: Query optimisation in distributed databases
 
 ## Using the application
 
-- `python main.py --env <LOCAL | HDFS> --mode <hadoop | spark> <"sql query">`
+- `python main.py --env <LOCAL | HDFS> --mode <hadoop | spark> --dd_path <path> <"sql query">`

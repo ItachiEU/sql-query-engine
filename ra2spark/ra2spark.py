@@ -71,8 +71,8 @@ def task_factory(raquery: radb.ast.Node, spark: SparkSession, env: str) -> Calla
         
         conditions = extract_conditions(raquery.cond)
 
-        left_rdd = left_transformation().map(lambda row: (tuple(row[col] for col, _ in conditions), row))
-        right_rdd = right_transformation().map(lambda row: (tuple(row[col] for _, col in conditions), row))
+        left_rdd = left_transformation().map(lambda row: (tuple(row[col1] if col1 in row.keys() else row[col2] for col1, col2 in conditions), row))
+        right_rdd = right_transformation().map(lambda row: (tuple(row[col2] if col2 in row.keys() else row[col1] for col1, col2 in conditions), row))
 
         return lambda: left_rdd.join(right_rdd).map(lambda x: {**x[1][0], **x[1][1]})
 
@@ -115,7 +115,7 @@ def run_radb_query_in_spark(query: Union[str, radb.ast.Node], env: str, ll: str)
         
     transformation = task_factory(radb_query, spark, env)
     result_rdd = transformation().collect()
-    print(result_rdd, len(result_rdd))
+    print(result_rdd[:10], len(result_rdd))
 
    
 def run_sql_query_in_spark(sqlstring: str, env = 'HDFS', dd: dict = {}, ll = 'INFO'):
