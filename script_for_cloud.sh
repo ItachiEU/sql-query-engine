@@ -10,6 +10,8 @@ mkdir /data
 gsutil cp gs://storage_intermediate/test_data.zip /data
 
 unzip /data/test_data.zip -d /data
+mv /data/test_data/* /data
+rmdir /data/test_data/
 
 cd /home/sql-query-engine
 

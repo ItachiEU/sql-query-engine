@@ -220,7 +220,7 @@ def collect_table_names(node, tables):
         for input in node.inputs:
             collect_table_names(input, tables)
 
-def involves_both_tables(node, condition):
+def involves_both_tables(node, condition, ancestor_tables):
     left_tables = set()
     right_tables = set()
 
@@ -240,35 +240,43 @@ def involves_both_tables(node, condition):
     collect_table_names(node.inputs[0], left_node_tables)
     collect_table_names(node.inputs[1], right_node_tables)
 
-    left_tables = left_tables.intersection(left_node_tables)
-    right_tables = right_tables.intersection(right_node_tables)
+    # Intersect the attribute tables with the node tables and the ancestor tables
+    left_tables = left_tables.intersection(left_node_tables.union(ancestor_tables))
+    right_tables = right_tables.intersection(right_node_tables.union(ancestor_tables))
 
     return bool(left_tables) and bool(right_tables)
 
-def process_cross_nodes(node: radb.ast.Node, conditions: List[radb.ast.ValExpr]) -> radb.ast.Node:
+def process_cross_nodes(node: radb.ast.Node, conditions: List[radb.ast.ValExpr], ancestor_tables: set) -> radb.ast.Node:
     if isinstance(node, radb.ast.Cross):
-        left = process_cross_nodes(node.inputs[0], conditions)
-        right = process_cross_nodes(node.inputs[1], conditions)
+        node_tables = set()
+        collect_table_names(node, node_tables)
+        ancestor_tables.update(node_tables)
 
-        join_conditions = [c for c in conditions if involves_both_tables(node, c)]
+        left = process_cross_nodes(node.inputs[0], conditions, ancestor_tables)
+        right = process_cross_nodes(node.inputs[1], conditions, ancestor_tables)
+
+        join_conditions = [c for c in conditions if involves_both_tables(node, c, ancestor_tables)]
 
         if join_conditions:
             combined_join_condition = join_conditions[0]
             for c in join_conditions[1:]:
                 combined_join_condition = radb.ast.ValExprBinaryOp(combined_join_condition, RAParser.AND, c)
 
-            return radb.ast.Join(left, combined_join_condition, right)
+            result = radb.ast.Join(left, combined_join_condition, right)
         else:
-            return radb.ast.Cross(left, right)
-    else:
-        return rule_introduce_joins(node)
+            result = radb.ast.Cross(left, right)
 
-def rule_introduce_joins(node: radb.ast.Node) -> radb.ast.Node:
+        ancestor_tables.difference_update(node_tables)
+        return result
+    else:
+        return rule_introduce_joins(node, ancestor_tables)    
+
+def rule_introduce_joins(node: radb.ast.Node, ancestor_tables = set()) -> radb.ast.Node:
     if isinstance(node, radb.ast.Select):
         child_node = rule_introduce_joins(node.inputs[0])
         conditions = split_conditions(node.cond)
 
-        new_child_node = process_cross_nodes(child_node, conditions)
+        new_child_node = process_cross_nodes(child_node, conditions, ancestor_tables)
         non_join_conditions = [c for c in conditions if not is_join_condition(c)]
 
         if non_join_conditions:
