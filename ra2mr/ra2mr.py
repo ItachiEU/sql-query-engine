@@ -1,3 +1,11 @@
+'''
+Część kodu w tym pliku pochodzi z repozytorium S. Scherzinger. Są to klasy:
+ExecEnv,OutputMixin,InputData,RelAlgQueryTask
+oraz
+JoinTask,SelectTask,RenameTask,ProjectTask z wyłączeniem implementacji metod mapper oraz reducer
+i funkcje:
+task_factory,count_steps
+'''
 from enum import Enum
 import json
 import luigi

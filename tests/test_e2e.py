@@ -1,4 +1,6 @@
-
+'''
+Kod z tego pliku pochodzi z repozytorium S. Scherzinger
+'''
 import json
 import luigi
 import radb
