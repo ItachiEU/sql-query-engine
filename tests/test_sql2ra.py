@@ -1,3 +1,6 @@
+'''
+Kod z tego pliku pochodzi z repozytorium S. Scherzinger
+'''
 import radb
 import radb.ast   # Some environments require this import.
 # import radb.parse # Some environments require this import.

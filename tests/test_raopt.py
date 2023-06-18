@@ -1,3 +1,6 @@
+'''
+Kod z tego pliku pochodzi z repozytorium S. Scherzinger
+'''
 import radb
 import raopt
 import unittest
